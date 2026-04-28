@@ -487,9 +487,10 @@ function InteractiveParamSlider({ simpleParam, winner }) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function ResultCard({ result, onRestart }) {
-  const { winner, winnerTech, requirements, tradeoffs, rejections, stack, simpleParam } = result;
+  const { winner, winnerTech, requirements, tradeoffs, rejections, stack, simpleParam, techScores } = result;
 
   const safeStack = stack || [{ techId: winner, role: 'Primary' }];
+  const scoreByTech = Object.fromEntries((techScores || []).map(t => [t.tech, t.percentage]));
   const safeReqs  = (requirements || []).filter(r => r.fit !== 'weak');
   const bullets   = TRADEOFF_BULLETS[winner] || { gains: [], costs: [] };
 
@@ -534,11 +535,23 @@ export default function ResultCard({ result, onRestart }) {
             <div className="flex flex-wrap items-start gap-8 mb-6">
               {safeStack.map((item, i) => {
                 const tech = technologies[item.techId];
+                const pct  = scoreByTech[item.techId] ?? (i === 0 ? 100 : null);
                 return (
                   <div key={item.techId} className={i > 0 ? 'pl-8 border-l border-[#E2E4E9]' : ''}>
-                    <p className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-widest mb-1.5">
-                      {item.role}
-                    </p>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <p className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-widest">
+                        {item.role}
+                      </p>
+                      {pct != null && (
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-sm border ${
+                          i === 0
+                            ? 'bg-[#EFF6FF] text-[#2563EB] border-[#BFDBFE]'
+                            : 'bg-[#F7F8FA] text-[#6B7280] border-[#E2E4E9]'
+                        }`}>
+                          {pct}% match
+                        </span>
+                      )}
+                    </div>
                     <p className={`font-bold text-[#0F1117] leading-tight ${i === 0 ? 'text-2xl' : 'text-base'}`}>
                       {tech.name}
                     </p>

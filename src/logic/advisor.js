@@ -41,7 +41,7 @@ export function computeRecommendation(answers, questions) {
   const justification = deriveJustification(winner, selectedOptions);
   const combinations = technologies[winner].combinations || [];
 
-  const stack = buildStack(winner, combinations, tags);
+  const stack = buildStack(winner, combinations, tags, techScores);
   const requirements = buildRequirements(winner, tags, combinations, justification, stack);
   const tradeoffs = buildTradeoffs(stack);
   const rejections = buildRejections(winner, techScores, tags, stack);
@@ -352,7 +352,10 @@ const PRIMARY_WHY = {
   legal: 'Enforceable rules constrain what actors are permitted to do, not just able to do',
 };
 
-function buildStack(winner, combinations, tags) {
+const SUPPORTING_THRESHOLD = 65; // supporting tech must score ≥ 65% of winner to appear
+
+function buildStack(winner, combinations, tags, techScores = []) {
+  const scoreMap = Object.fromEntries(techScores.map(t => [t.tech, t.percentage]));
   const stack = [{ techId: winner, role: 'Primary', requirement: PRIMARY_REQUIREMENT[winner], why: PRIMARY_WHY[winner] }];
 
   const used = new Set([winner]);
@@ -360,6 +363,7 @@ function buildStack(winner, combinations, tags) {
     if (stack.length >= 2) break;
     const id = COMBO_NAME_TO_ID[combo.tech];
     if (!id || used.has(id)) continue;
+    if ((scoreMap[id] ?? 0) < SUPPORTING_THRESHOLD) continue;
     used.add(id);
     const role = 'Supporting';
     // Derive short requirement from combo reason
