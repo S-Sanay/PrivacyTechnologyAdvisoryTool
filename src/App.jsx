@@ -18,7 +18,7 @@ function LoadingScreen() {
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
-    const duration = 5000;
+    const duration = 3000;
     const stepInterval = duration / LOADING_STEPS.length;
 
     const stepTimer = setInterval(() => {
@@ -105,7 +105,7 @@ export default function App() {
       const rec = computeRecommendation(answers, questions);
       setResult(rec);
       setPhase('loading');
-      setTimeout(() => setPhase('result'), 5000);
+      setTimeout(() => setPhase('result'), 3000);
     }
   };
 
