@@ -4,7 +4,10 @@
 
 body {
   font-family: 'Inter', sans-serif;
-  background-color: #f1f5f9;
+  background-color: #F7F8FA;
+  color: #0F1117;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 * {
