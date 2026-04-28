@@ -401,15 +401,15 @@ export default function ResultCard({ result, onRestart }) {
                     onClick={() => setActiveChip(activeChip === i ? null : i)}
                     onMouseEnter={() => setHoveredChip(i)}
                     onMouseLeave={() => setHoveredChip(null)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-all duration-150 cursor-pointer ${
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-all duration-150 cursor-pointer text-left ${
                       isHighlighted
                         ? `${c.light} ${c.border} ${c.text} shadow-sm`
                         : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-100'
                     }`}
                   >
-                    <span>{req.icon}</span>
-                    <span className="max-w-[180px] truncate">{req.text}</span>
-                    {isPinned && <span className="text-xs opacity-70">✓</span>}
+                    <span className="flex-shrink-0">{req.icon}</span>
+                    <span className="break-words">{req.text}</span>
+                    {isPinned && <span className="text-xs opacity-70 flex-shrink-0">✓</span>}
                   </button>
                 );
               })}
@@ -447,7 +447,7 @@ export default function ResultCard({ result, onRestart }) {
                     }`}
                   >
                     <span className="text-base flex-shrink-0 mt-0.5">{req.icon}</span>
-                    <span className={`text-sm flex-1 ${
+                    <span className={`text-sm flex-1 min-w-0 break-words ${
                       highlightedChip === i ? `font-bold ${c.text}` : 'text-slate-700'
                     }`}>
                       {req.text}

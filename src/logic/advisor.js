@@ -44,7 +44,7 @@ export function computeRecommendation(answers, questions) {
   const stack = buildStack(winner, combinations, tags);
   const requirements = buildRequirements(winner, tags, combinations, justification, stack);
   const tradeoffs = buildTradeoffs(stack);
-  const rejections = buildRejections(winner, techScores, tags);
+  const rejections = buildRejections(winner, techScores, tags, stack);
   const rollout = buildRollout(winner, tags);
   const idealProfile = deriveIdealProfile(tags);
   const simpleParam = deriveSimpleParam(winner, tags);
@@ -512,9 +512,10 @@ const REJECTION_DATA = {
   },
 };
 
-function buildRejections(winner, techScores, tags) {
+function buildRejections(winner, techScores, tags, stack = []) {
+  const stackIds = new Set(stack.map(s => s.techId));
   return techScores
-    .filter(t => t.tech !== winner)
+    .filter(t => !stackIds.has(t.tech))
     .slice(0, 3)
     .map(t => {
       const data = REJECTION_DATA[t.tech];
