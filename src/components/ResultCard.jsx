@@ -323,13 +323,16 @@ function RadarChart({ scores, idealProfile, hex }) {
 function ParamSlider({ simpleParam, winner }) {
   if (!simpleParam) return null;
   const c = C[winner];
-  const { name, leftLabel, rightLabel, value, subvalue, pct, markers, context } = simpleParam;
+  const { name, leftLabel, rightLabel, value, subvalue, pct, markers, context, description } = simpleParam;
   const clampedPct = Math.min(Math.max(pct, 4), 96);
 
   return (
     <div>
-      <div className="mb-5">
+      <div className="mb-4">
         <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">{name}</p>
+        {description && (
+          <p className="text-xs text-slate-500 leading-relaxed mb-3">{description}</p>
+        )}
         <div className="flex items-baseline gap-2">
           <span className={`text-3xl font-extrabold ${c.text}`}>{value}</span>
           {subvalue && <span className="text-sm text-slate-400 font-medium">{subvalue}</span>}
@@ -719,13 +722,23 @@ export default function ResultCard({ result, onRestart }) {
                 <ParamSlider simpleParam={simpleParam} winner={winner} />
               </div>
             ) : (
-              <div className="flex-1 flex flex-col justify-center items-center text-center gap-3 py-8">
-                <span className="text-5xl">{winnerTech.icon}</span>
-                <p className="text-slate-500 text-sm max-w-xs leading-relaxed">
-                  {winner === 'mpc'
-                    ? 'Parameter selection for MPC should be determined in collaboration with a cryptography specialist based on your party count and threat model.'
-                    : 'Configuration for this approach is primarily organizational and policy-based — consult your legal and privacy team.'}
-                </p>
+              <div className="flex-1 flex flex-col justify-center gap-4 py-4">
+                <span className="text-4xl">{winnerTech.icon}</span>
+                {winner === 'mpc' ? (
+                  <div className="space-y-2">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">No Single Tunable Parameter</p>
+                    <p className="text-slate-500 text-sm leading-relaxed">
+                      MPC has no single dial to turn — its configuration is a set of structural choices determined by your deployment: the <span className="font-medium text-slate-700">number of parties (n)</span>, the <span className="font-medium text-slate-700">corruption threshold (t &lt; n/2 for semi-honest, t &lt; n/3 for malicious)</span>, and the <span className="font-medium text-slate-700">protocol</span> (Yao's Garbled Circuits for 2 parties; SPDZ or ABY3 for 3+). These must be fixed before implementation and require cryptographic expertise to validate.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">No Technical Parameter</p>
+                    <p className="text-slate-500 text-sm leading-relaxed">
+                      Legal and constitutional frameworks have no technical dial — protection comes from <span className="font-medium text-slate-700">policy design</span> and <span className="font-medium text-slate-700">enforcement mechanisms</span>. The key controls to configure are consent requirements, data retention limits, access restrictions, breach notification obligations, and audit procedures — all defined in contracts, privacy notices, and internal governance documents.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>

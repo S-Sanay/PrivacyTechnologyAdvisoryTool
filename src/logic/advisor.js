@@ -659,7 +659,8 @@ function deriveSimpleParam(tech, tags) {
                  : 'Higher utility — weaker formal guarantee';
     return { name: 'Privacy Budget (ε)', leftLabel: 'Strict Privacy', rightLabel: 'Higher Utility',
              value: `ε = ${eps.toFixed(1)}`, subvalue: mode, pct, markers: ['0.01', '0.1', '1', '5', '10'], context,
-             recommendedZone: { from: 33, to: 67 }, zoneLabel: 'ε = 0.1 → 1.0' };
+             recommendedZone: { from: 33, to: 67 }, zoneLabel: 'ε = 0.1 → 1.0',
+             description: 'Epsilon (ε) bounds how much a single person\'s data can shift any query result. Every answer is randomized by noise calibrated to ε — lower values add more noise for stronger privacy; higher values add less noise for more accurate outputs.' };
   }
 
   if (tech === 'anon') {
@@ -671,7 +672,8 @@ function deriveSimpleParam(tech, tags) {
                  : 'Strong — required for high-sensitivity or public datasets';
     return { name: 'K-Anonymity Level', leftLabel: 'Less Utility Loss', rightLabel: 'Stronger Protection',
              value: `k = ${k}`, subvalue: null, pct, markers: ['k=2', 'k=5', 'k=10', 'k=25', 'k=50'], context,
-             recommendedZone: { from: 6, to: 48 }, zoneLabel: 'k = 5 → 25' };
+             recommendedZone: { from: 6, to: 48 }, zoneLabel: 'k = 5 → 25',
+             description: 'k is the minimum group size every record must belong to. The dataset is generalized (e.g., broadening ages or zip codes) and partially suppressed until no individual can be singled out from at least k−1 others who share the same identifying attributes.' };
   }
 
   if (tech === 'fl') {
@@ -679,7 +681,8 @@ function deriveSimpleParam(tech, tags) {
     return { name: 'Client Participation Rate', leftLabel: 'Fewer clients / round', rightLabel: 'More clients / round',
              value: '5–10%', subvalue: 'per training round', pct, markers: ['1%', '5%', '10%', '25%', '50%'],
              context: 'Sample 5–10% of available participants per round for scalability and dropout resilience',
-             recommendedZone: { from: 8, to: 18 }, zoneLabel: '5% → 10% per round' };
+             recommendedZone: { from: 8, to: 18 }, zoneLabel: '5% → 10% per round',
+             description: 'Each training round, only a random fraction of clients are selected to download the global model, train locally on their own data, and return only gradient updates — never raw data. This rate balances convergence speed against the cost of coordinating large numbers of devices per round.' };
   }
 
   return null;
