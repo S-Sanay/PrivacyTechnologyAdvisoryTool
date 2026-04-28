@@ -1,0 +1,212 @@
+USE CASE: Population Health Analytics with Differential Privacy
+==============================================================
+
+COMPANY: NovaCare Health Systems
+ROLE: A regional hospital network with 12 facilities serving ~400,000 patients
+GOAL: Release aggregate analytics on patient outcomes, drug efficacy, and disease prevalence
+      to pharmaceutical partners and public health researchers — without exposing individual records.
+
+---
+
+BACKGROUND
+----------
+NovaCare maintains a central data warehouse containing:
+  - Patient demographics (name, DOB, SSN, address)
+  - Medical history (diagnoses, ICD-10 codes, chronic conditions)
+  - Prescription records (drug name, dosage, duration, prescribing physician)
+  - Lab results (blood panels, biometrics, genetic markers)
+  - Insurance and billing records
+
+A pharmaceutical company, MedAxion, wants to license a report answering:
+
+  Q1. What percentage of Type 2 diabetes patients in the 45-65 age group responded
+      positively to Metformin vs. GLP-1 agonists over a 12-month period?
+
+  Q2. What is the 90-day readmission rate for post-cardiac-event patients
+      broken down by ZIP code, sex, and smoking status?
+
+  Q3. How does hypertension prevalence correlate with income bracket
+      across NovaCare's service area?
+
+These questions are highly valuable but answering them naively (even with names stripped)
+risks re-identification — especially in small subgroups (e.g., only 3 patients in a ZIP
+code have a specific rare co-morbidity).
+
+---
+
+THREAT MODEL
+------------
+Without privacy protection, an adversary with auxiliary knowledge (public records,
+insurance databases, social media) could:
+  1. Cross-reference age + ZIP + rare diagnosis to re-identify individuals.
+  2. Infer sensitive conditions (HIV status, mental health, addiction) from drug data.
+  3. Reconstruct individual lab values from published aggregate statistics.
+
+Legal exposure: HIPAA minimum necessary standard, GDPR Art. 9 (special category data),
+state biometric privacy laws.
+
+---
+
+SOLUTION: Differential Privacy Pipeline
+----------------------------------------
+
+NovaCare implements a query-answering system with (ε, δ)-differential privacy,
+where ε = 1.0 and δ = 1e-6 per query batch (calibrated to acceptable privacy loss).
+
+Step 1 — Data Ingestion & Tokenization
+  Raw records stay in the secure warehouse. All direct identifiers (name, SSN, MRN,
+  full DOB) are replaced with pseudonymous tokens for internal processing. No tokens
+  leave the warehouse.
+
+Step 2 — Sensitivity Analysis per Query
+  For each query, the system computes the global sensitivity Δf — the maximum
+  change in the query result from adding or removing one individual's record.
+
+  Example for Q1:
+    f = (count of positive responders to Metformin) / (total Metformin patients in cohort)
+    Δf = 1 / (cohort size)   [bounded sensitivity]
+
+Step 3 — Noise Injection
+  The Laplace mechanism is applied for count/proportion queries:
+    noisy_result = true_result + Laplace(0, Δf / ε)
+
+  For Q2 (multiple subgroup breakdowns), the Gaussian mechanism with composition
+  accounting (via the moments accountant / Rényi DP) is used to stay within budget
+  across correlated queries.
+
+  For Q3 (correlation coefficient), a private covariance estimator clips
+  individual contributions before aggregation.
+
+Step 4 — Suppression of Small Cells
+  Any subgroup with a noisy count below threshold k=10 is suppressed entirely
+  and reported as "<10" to prevent the noise from being reverse-engineered via
+  repeated queries.
+
+Step 5 — Privacy Budget Tracking
+  Each partner (MedAxion, public health agencies) receives an allocated ε budget.
+  A privacy accountant logs every query against that budget. When budget is exhausted,
+  further queries are denied until the next contract period.
+
+Step 6 — Audit & Output Review
+  All released outputs pass through a disclosure review board that checks:
+    - No cell counts below suppression threshold
+    - No combination of released statistics that allows differencing attacks
+    - ε spent vs. allocated ratio
+  The final report is signed with a cryptographic audit log entry.
+
+---
+
+EXAMPLE QUERY FLOW
+------------------
+
+MedAxion submits Q1:
+  "Metformin vs GLP-1 response rate, age 45-65, Type 2 diabetes, 2023-2024"
+
+Internal true counts (never released):
+  Metformin positive response:  1,847 / 3,102  = 59.5%
+  GLP-1 positive response:      2,011 / 2,876  = 69.9%
+
+Sensitivity: Δf ≈ 1/2,900 (roughly, per cohort)
+Noise scale: Laplace(0, 1/2900 / 1.0) → standard deviation ≈ 0.00049
+
+Noisy released values:
+  Metformin: 59.5% ± ~0.05%   → released as 59.5%
+  GLP-1:     69.9% ± ~0.05%   → released as 69.9%
+
+Privacy cost: ε = 0.08 (charged to MedAxion's annual budget of ε = 2.0)
+
+The noise is imperceptible at this cohort size, yet the mathematical guarantee means
+no individual patient's record could have meaningfully changed the published result —
+their participation is protected.
+
+---
+
+OUTCOME
+-------
+NovaCare successfully monetizes population health insights, MedAxion gets statistically
+valid efficacy data for regulatory submissions, and no individual patient's medical
+history is exposed or re-identifiable. The differential privacy guarantee is
+mathematically provable, not policy-dependent — it holds even if the recipient is
+actively adversarial.
+
+Privacy parameters published in the report's methodology section:
+  ε = 1.0 (per query), δ = 1e-6, mechanism = Laplace/Gaussian (per query type),
+  composition = Rényi DP moments accountant, suppression threshold k = 10.
+
+---
+
+QUIZ ANSWERS (privacy-advisor tool)
+-------------------------------------
+These are the answers that correctly characterize this use case in the advisor quiz.
+The expected recommendation is: Differential Privacy (Central DP, ε = 0.5).
+
+Q1.  What is your organization's primary privacy objective?
+     → "Run private queries or analyses on sensitive data"
+       NovaCare answers statistical questions (efficacy rates, readmission rates,
+       correlations) with formal provable guarantees — the defining DP use case.
+
+Q2.  Who poses the greatest privacy risk in your scenario?
+     → "External adversaries — hackers, data thieves, or unauthorized third parties"
+       The threat model is re-identification by adversaries with auxiliary knowledge
+       (public records, insurance databases). DP's guarantee holds against any
+       external adversary regardless of background knowledge.
+
+Q3.  Where does the sensitive data currently reside?
+     → "All centralized within our organization"
+       NovaCare maintains a single central data warehouse. All PHI stays there;
+       only noisy aggregate answers leave it.
+
+Q4.  How many parties are involved in the computation or data access?
+     → "Just our organization"
+       NovaCare is the sole data holder and the only party running analyses.
+       Partners (MedAxion) receive outputs, not data access.
+
+Q5.  What is the trust model between the parties involved?
+     → "A single trusted curator or our organization controls all data"
+       NovaCare acts as the trusted central curator — the standard Central DP model,
+       which yields far higher accuracy than Local DP for the same ε.
+
+Q6.  What type of output does your use case require?
+     → "Aggregate statistics, summaries, or query results"
+       Released outputs are percentages, rates, and correlations — not raw records
+       or ML model artifacts. Private aggregate statistics are DP's core output.
+
+Q7.  How critical is exact numerical accuracy in your outputs?
+     → "Small statistical noise is acceptable for stronger privacy"
+       At cohort sizes of thousands, the Laplace noise added (σ ≈ 0.05%) is
+       imperceptible. MedAxion can use results for regulatory submissions.
+
+Q8.  How sensitive is the data your organization is working with?
+     → "Highly sensitive — medical, financial, or legal records"
+       The warehouse contains PHI: diagnoses, prescriptions, lab results, and
+       insurance records. HIPAA and GDPR Art. 9 apply directly.
+
+Q9.  Which regulatory or legal frameworks apply to your data?
+     → "HIPAA (US Health Insurance Portability and Accountability Act)"
+       NovaCare processes Protected Health Information in the US. HIPAA's
+       Expert Determination de-identification path accepts DP's formal proof.
+
+Q10. What computational resources can you dedicate to the privacy system?
+     → "Moderate — some overhead is acceptable for meaningful privacy benefits"
+       The DP pipeline (sensitivity analysis, noise injection, budget accounting,
+       audit logging) adds meaningful but manageable infrastructure overhead.
+
+Q11. What specifically needs to be protected in your scenario?
+     → "Both individual identity and sensitive attribute values"
+       Two-sided risk: re-identification via quasi-identifiers (age, ZIP, diagnosis)
+       AND inference of sensitive attributes (drug response, HIV status, addiction).
+
+Q12. Does your use case involve training or deploying machine learning models?
+     → "No — this is not an ML or AI use case"
+       NovaCare releases statistical analytics, not ML model artifacts. No
+       gradient-based training pipeline is involved.
+
+Q13. What is the primary format of your sensitive data?
+     → "Tabular / structured data (rows and columns)"
+       Medical records are stored in relational database tables with well-defined
+       fields (patient ID, ICD-10 code, drug name, dosage, date, etc.).
+
+Q14. How important is a formal mathematical privacy guarantee?
+     → "Important — we want provable guarantees with practical tradeoffs"
+       The (ε, δ) guarantee must be auditable for HIPAA Expert Determination and
+       publishable in the methodology section — but utility tradeoffs are accepted.
