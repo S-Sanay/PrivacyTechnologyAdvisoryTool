@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { technologies } from '../data/technologies';
 
 // ─── Colour palette ───────────────────────────────────────────────────────────
@@ -88,55 +88,143 @@ function MetricBar({ label, value, barClass, icon }) {
   );
 }
 
-// ─── Static parameter range bar ──────────────────────────────────────────────
-function ParamRange({ simpleParam, winner }) {
+// ─── Impact curves per technology ────────────────────────────────────────────
+const IMPACT_CURVES = {
+  dp: {
+    pctToLabel: p => `ε = ${Math.pow(10, p / 100 * 3 - 2).toFixed(p < 45 ? 2 : 1)}`,
+    curves: [
+      { label: 'Privacy Strength',      icon: '🛡️', fn: p => Math.round(98 - p * 0.70), higherBetter: true },
+      { label: 'Utility / Accuracy',    icon: '📊', fn: p => Math.round(28 + p * 0.67), higherBetter: true },
+      { label: 'Compliance Confidence', icon: '⚖️', fn: p => Math.round(96 - p * 0.48), higherBetter: true },
+      { label: 'Leakage Risk',          icon: '🔓', fn: p => Math.round(3  + p * 0.65), higherBetter: false },
+    ],
+    inZone:  'Balances a formal privacy guarantee with practical accuracy for most analytics workloads.',
+    tooLow:  'Very low ε adds heavy noise — results may be too inaccurate for practical decisions.',
+    tooHigh: 'High ε weakens the formal guarantee — individual records can meaningfully influence outputs.',
+  },
+  anon: {
+    pctToLabel: p => `k = ${Math.round(p / 100 * 48 + 2)}`,
+    curves: [
+      { label: 'Re-ID Protection',   icon: '🛡️', fn: p => Math.round(32 + p * 0.60), higherBetter: true },
+      { label: 'Data Utility',       icon: '📊', fn: p => Math.round(96 - p * 0.57), higherBetter: true },
+      { label: 'Compliance Fit',     icon: '⚖️', fn: p => Math.round(42 + p * 0.52), higherBetter: true },
+      { label: 'Re-ID Leakage Risk', icon: '🔓', fn: p => Math.round(80 - p * 0.68), higherBetter: false },
+    ],
+    inZone:  'Groups of 5–25 provide meaningful re-identification protection while keeping most values usable.',
+    tooLow:  'Very small k (2–4) gives minimal protection — easy to narrow records down to a handful of candidates.',
+    tooHigh: 'Very large k forces heavy generalisation, causing significant utility loss and suppression of rare records.',
+  },
+  fl: {
+    pctToLabel: p => `${Math.round(p / 100 * 49 + 1)}%`,
+    curves: [
+      { label: 'Model Accuracy',     icon: '📊', fn: p => Math.round(38 + p * 0.52), higherBetter: true },
+      { label: 'Gradient Privacy',   icon: '🛡️', fn: p => Math.round(88 - p * 0.30), higherBetter: true },
+      { label: 'Compute Efficiency', icon: '⚡', fn: p => Math.round(96 - p * 0.52), higherBetter: true },
+      { label: 'Gradient Leakage',   icon: '🔓', fn: p => Math.round(5  + p * 0.50), higherBetter: false },
+    ],
+    inZone:  'Sampling 5–10% of clients per round achieves good convergence while keeping compute and leakage risk low.',
+    tooLow:  'Too few clients per round slows convergence and can introduce sampling bias in the global model.',
+    tooHigh: 'High participation sharply increases per-round compute costs and gradient aggregation leakage.',
+  },
+};
+
+// ─── Interactive parameter slider ─────────────────────────────────────────────
+function ParamSlider({ simpleParam, winner }) {
   if (!simpleParam) return null;
   const c = C[winner];
-  const { name, value, subvalue, markers, recommendedZone, zoneLabel, leftLabel, rightLabel, description, pct } = simpleParam;
-  const clampedPct = Math.min(94, Math.max(6, pct));
+  const config = IMPACT_CURVES[winner];
+  const { name, subvalue, markers, recommendedZone, zoneLabel, leftLabel, rightLabel, description } = simpleParam;
 
-  const tradeoffNote = {
-    dp:   'Increasing ε → more accuracy, weaker privacy guarantee',
-    anon: 'Increasing k → stronger protection, less data granularity',
-    fl:   'Higher participation rate → faster convergence, higher per-round cost',
-  }[winner];
+  const [pct, setPct] = useState(simpleParam.pct);
+  const trackRef = useRef(null);
+  const dragging = useRef(false);
+
+  const updateFromClient = useCallback((clientX) => {
+    if (!trackRef.current) return;
+    const rect = trackRef.current.getBoundingClientRect();
+    setPct(Math.round(Math.min(100, Math.max(0, ((clientX - rect.left) / rect.width) * 100))));
+  }, []);
+
+  const onMouseDown = (e) => {
+    dragging.current = true;
+    updateFromClient(e.clientX);
+    const onMove = (e) => { if (dragging.current) updateFromClient(e.clientX); };
+    const onUp   = () => { dragging.current = false; document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+
+  const onTouchStart = (e) => {
+    updateFromClient(e.touches[0].clientX);
+    const onMove = (e) => updateFromClient(e.touches[0].clientX);
+    const onEnd  = () => { document.removeEventListener('touchmove', onMove); document.removeEventListener('touchend', onEnd); };
+    document.addEventListener('touchmove', onMove, { passive: true });
+    document.addEventListener('touchend', onEnd);
+  };
+
+  const zone       = recommendedZone;
+  const inZone     = zone && pct >= zone.from && pct <= zone.to;
+  const belowZone  = zone && pct < zone.from;
+  const thumbPct   = Math.min(96, Math.max(4, pct));
+  const liveLabel  = config ? config.pctToLabel(pct) : simpleParam.value;
+  const reason     = config ? (inZone ? config.inZone : belowZone ? config.tooLow : config.tooHigh) : null;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      {/* Name + description */}
       <div>
         <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">{name}</p>
-        {description && <p className="text-xs text-slate-500 leading-relaxed mb-2">{description}</p>}
-        <div className="flex items-baseline gap-2">
-          <span className={`text-2xl font-extrabold ${c.text}`}>{value}</span>
-          {subvalue && <span className="text-sm text-slate-400">{subvalue}</span>}
-        </div>
+        {description && <p className="text-xs text-slate-500 leading-relaxed">{description}</p>}
       </div>
 
-      {/* Range bar */}
+      {/* Live value + zone badge */}
+      <div className="flex flex-wrap items-center gap-3">
+        <span className={`text-3xl font-extrabold ${c.text}`}>{liveLabel}</span>
+        {subvalue && <span className="text-sm text-slate-400">{subvalue}</span>}
+        {zone && (
+          <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
+            inZone
+              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+              : 'bg-amber-50 text-amber-700 border-amber-200'
+          }`}>
+            {inZone ? '✓ Recommended zone' : '⚠ Outside recommended zone'}
+          </span>
+        )}
+      </div>
+
+      {/* Draggable track */}
       <div>
-        <div className="flex justify-between text-xs text-slate-400 mb-1.5">
+        <div className="flex justify-between text-xs text-slate-400 mb-2">
           <span>← {leftLabel}</span>
           <span>{rightLabel} →</span>
         </div>
-        <div className="relative h-5 rounded-full bg-gradient-to-r from-emerald-100 via-yellow-100 to-red-100 border border-slate-200">
-          {/* Recommended zone shading */}
-          {recommendedZone && (
-            <div
-              className={`absolute top-0 bottom-0 ${c.bar} opacity-20`}
-              style={{ left: `${recommendedZone.from}%`, width: `${recommendedZone.to - recommendedZone.from}%` }}
-            />
-          )}
-          {/* Zone bracket markers */}
-          {recommendedZone && (
+        <div
+          ref={trackRef}
+          onMouseDown={onMouseDown}
+          onTouchStart={onTouchStart}
+          className="relative h-11 cursor-grab active:cursor-grabbing select-none rounded-xl"
+          style={{ touchAction: 'none' }}
+        >
+          {/* Gradient background */}
+          <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-emerald-100 via-yellow-100 to-red-100 border border-slate-200 overflow-hidden">
+            {zone && (
+              <div
+                className={`absolute top-0 bottom-0 ${c.bar} opacity-25`}
+                style={{ left: `${zone.from}%`, width: `${zone.to - zone.from}%` }}
+              />
+            )}
+          </div>
+          {/* Zone bracket lines */}
+          {zone && (
             <>
-              <div className="absolute top-1 bottom-1 w-px bg-slate-400 opacity-40" style={{ left: `${recommendedZone.from}%` }} />
-              <div className="absolute top-1 bottom-1 w-px bg-slate-400 opacity-40" style={{ left: `${recommendedZone.to}%` }} />
+              <div className="absolute top-2 bottom-2 w-px border-l-2 border-dashed border-slate-400 opacity-60 z-10" style={{ left: `${zone.from}%` }} />
+              <div className="absolute top-2 bottom-2 w-px border-r-2 border-dashed border-slate-400 opacity-60 z-10" style={{ right: `${100 - zone.to}%` }} />
             </>
           )}
-          {/* Value marker */}
+          {/* Thumb */}
           <div
-            className={`absolute top-1/2 w-5 h-5 rounded-full ${c.bg} border-2 border-white shadow-md`}
-            style={{ left: `${clampedPct}%`, transform: 'translate(-50%, -50%)' }}
+            className={`absolute top-1/2 w-8 h-8 rounded-full ${c.bg} shadow-lg border-4 border-white z-20`}
+            style={{ left: `${thumbPct}%`, transform: 'translate(-50%, -50%)' }}
           />
         </div>
         <div className="flex justify-between text-xs text-slate-400 mt-1.5">
@@ -153,9 +241,42 @@ function ParamRange({ simpleParam, winner }) {
         </div>
       )}
 
-      {/* Tradeoff note */}
-      {tradeoffNote && (
-        <p className="text-xs text-slate-400 italic">{tradeoffNote}</p>
+      {/* Context explanation */}
+      {reason && (
+        <p className={`text-sm rounded-lg px-3 py-2.5 border leading-relaxed ${
+          inZone
+            ? `${c.light} ${c.border} ${c.text}`
+            : 'bg-amber-50 border-amber-200 text-amber-800'
+        }`}>
+          {inZone ? '✓ ' : '⚠ '}{reason}
+        </p>
+      )}
+
+      {/* Impact bars */}
+      {config && (
+        <div className="pt-1 space-y-3">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Impact at current setting</p>
+          {config.curves.map(curve => {
+            const val = Math.min(100, Math.max(0, curve.fn(pct)));
+            const good = curve.higherBetter ? val >= 65 : val <= 35;
+            const warn = curve.higherBetter ? val < 35  : val > 65;
+            const barColor = good ? 'bg-emerald-500' : warn ? 'bg-red-400' : 'bg-amber-400';
+            const textColor = good ? 'text-emerald-700' : warn ? 'text-red-600' : 'text-amber-700';
+            return (
+              <div key={curve.label}>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-sm w-5 flex-shrink-0">{curve.icon}</span>
+                  <span className="text-xs font-medium text-slate-600 flex-1">{curve.label}</span>
+                  {!curve.higherBetter && <span className="text-xs text-slate-400 italic">lower is better</span>}
+                  <span className={`text-xs font-bold w-7 text-right flex-shrink-0 ${textColor}`}>{val}</span>
+                </div>
+                <div className="bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                  <div className={`h-1.5 rounded-full transition-all duration-150 ${barColor}`} style={{ width: `${val}%` }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
@@ -423,7 +544,7 @@ export default function ResultCard({ result, onRestart }) {
         {simpleParam ? (
           <div className="bg-white rounded-xl border border-slate-200 px-5 py-5">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-5">Recommended Settings</p>
-            <ParamRange simpleParam={simpleParam} winner={winner} />
+            <ParamSlider simpleParam={simpleParam} winner={winner} />
           </div>
         ) : (
           <div className="bg-white rounded-xl border border-slate-200 px-5 py-5">
