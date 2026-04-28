@@ -319,9 +319,38 @@ function FactorRow({ req, winnerName }) {
   );
 }
 
+// ─── Marker position helpers ──────────────────────────────────────────────────
+// Returns each marker's position as a % of the track width, matching the slider scale.
+function getMarkerPositions(winner, markers) {
+  if (winner === 'dp') {
+    // Log scale: pct = ((log10(ε) + 2) / 3) * 100  (range 0.01–10)
+    return markers.map(m => {
+      const eps = parseFloat(m);
+      return Math.round(((Math.log10(eps) + 2) / 3) * 100);
+    });
+  }
+  if (winner === 'anon') {
+    // Linear: pct = (k − 2) / 48 * 100  (range k=2–50)
+    return markers.map(m => {
+      const k = parseInt(m.replace('k=', ''), 10);
+      return Math.round(((k - 2) / 48) * 100);
+    });
+  }
+  if (winner === 'fl') {
+    // Linear: pct = (rate − 1) / 49 * 100  (range 1–50 %)
+    return markers.map(m => {
+      const rate = parseInt(m.replace('%', ''), 10);
+      return Math.round(((rate - 1) / 49) * 100);
+    });
+  }
+  // Fallback: evenly spaced
+  return markers.map((_, i) => Math.round((i / (markers.length - 1)) * 100));
+}
+
 // ─── Interactive Parameter Slider ─────────────────────────────────────────────
 function InteractiveParamSlider({ simpleParam, winner }) {
   const { name, leftLabel, rightLabel, markers, recommendedZone, zoneLabel, description } = simpleParam;
+  const markerPositions = getMarkerPositions(winner, markers);
   const [sliderPct, setSliderPct] = useState(simpleParam.pct);
 
   const paramVal  = computeParamValue(winner, sliderPct, simpleParam);
@@ -402,8 +431,25 @@ function InteractiveParamSlider({ simpleParam, winner }) {
           />
         </div>
 
-        <div className="flex justify-between text-[10px] text-[#9CA3AF] mt-1.5">
-          {markers.map((m, i) => <span key={i}>{m}</span>)}
+        <div className="relative h-4 mt-1.5">
+          {markers.map((m, i) => {
+            const pos = markerPositions[i];
+            const isFirst = pos === 0;
+            const isLast  = pos === 100;
+            return (
+              <span
+                key={i}
+                className="absolute text-[10px] text-[#9CA3AF] whitespace-nowrap"
+                style={{
+                  left:      isLast  ? 'auto' : `${pos}%`,
+                  right:     isLast  ? '0'    : 'auto',
+                  transform: isFirst || isLast ? 'none' : 'translateX(-50%)',
+                }}
+              >
+                {m}
+              </span>
+            );
+          })}
         </div>
       </div>
 
