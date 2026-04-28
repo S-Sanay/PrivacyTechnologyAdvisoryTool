@@ -65,15 +65,153 @@ const TRADEOFF_BULLETS = {
   },
 };
 
-// ─── Parameter effect descriptions ────────────────────────────────────────────
-const PARAM_EFFECT = {
-  'Privacy Budget (ε)':
-    'Decreasing ε (moving left) adds more noise for a stronger formal guarantee. Increasing ε (moving right) reduces noise for more accurate outputs but weakens the bound.',
-  'K-Anonymity Level':
-    'Increasing k (moving right) requires larger equivalence groups, strengthening re-identification protection at the cost of greater data generalisation.',
-  'Client Participation Rate':
-    'Higher participation per round improves convergence speed but raises per-round compute and gradient aggregation overhead. Lower rates are more efficient but converge more slowly.',
+// ─── Slider parameter helpers ──────────────────────────────────────────────────
+
+function computeParamValue(winner, pct, simpleParam) {
+  if (winner === 'dp') {
+    const eps = Math.pow(10, (pct / 100) * 3 - 2);
+    const f = eps < 0.1 ? eps.toFixed(3) : eps < 1 ? eps.toFixed(2) : eps.toFixed(1);
+    const strength =
+      eps < 0.5  ? 'Strong privacy'
+      : eps < 1  ? 'Moderate–strong'
+      : eps < 3  ? 'Moderate privacy'
+                 : 'Weak privacy';
+    return { primary: `ε = ${f}`, badge: strength, mode: simpleParam.subvalue };
+  }
+  if (winner === 'anon') {
+    const k = Math.round(2 + (pct / 100) * 48);
+    const range =
+      k < 5   ? 'Below recommended minimum'
+      : k <= 10 ? 'Standard (conservative)'
+      : k <= 25 ? 'Standard'
+                : 'High protection';
+    return { primary: `k = ${k}`, badge: range };
+  }
+  if (winner === 'fl') {
+    const rate = Math.round(1 + (pct / 100) * 49);
+    return { primary: `${rate}%`, badge: 'of clients per round' };
+  }
+  return { primary: '—', badge: null };
+}
+
+function computeAspects(winner, pct) {
+  if (winner === 'dp') {
+    const eps = Math.pow(10, (pct / 100) * 3 - 2);
+    return [
+      {
+        label: 'Privacy Guarantee Strength',
+        value: Math.round(100 - pct),
+      },
+      {
+        label: 'Output Accuracy',
+        value: Math.round(pct),
+      },
+      {
+        label: 'Noise per Query',
+        value: Math.round(Math.pow((100 - pct) / 100, 0.65) * 95),
+      },
+      {
+        label: 'Regulatory / HIPAA Fit',
+        value: eps < 0.5 ? 93 : eps < 1 ? 80 : eps < 3 ? 52 : eps < 6 ? 28 : 12,
+      },
+    ];
+  }
+  if (winner === 'anon') {
+    const k = Math.round(2 + (pct / 100) * 48);
+    return [
+      {
+        label: 'Re-identification Protection',
+        value: Math.round(Math.min(95, pct * 0.9 + 5)),
+      },
+      {
+        label: 'Data Utility Retained',
+        value: Math.round(Math.max(15, 100 - pct * 0.75)),
+      },
+      {
+        label: 'Record Retention Rate',
+        value: Math.round(Math.max(20, 100 - pct * 0.65)),
+      },
+      {
+        label: 'Regulatory Compliance Fit',
+        value: k >= 10 ? 90 : k >= 5 ? 72 : k >= 3 ? 48 : 22,
+      },
+    ];
+  }
+  if (winner === 'fl') {
+    return [
+      {
+        label: 'Convergence Speed',
+        value: Math.round(Math.min(93, pct * 0.87 + 6)),
+      },
+      {
+        label: 'Gradient Representation Quality',
+        value: Math.round(Math.min(90, pct * 0.82 + 9)),
+      },
+      {
+        label: 'Dropout Resilience',
+        value: Math.round(Math.max(12, 100 - pct * 0.86)),
+      },
+      {
+        label: 'Round Efficiency',
+        value: Math.round(Math.max(12, 100 - pct * 0.82)),
+      },
+    ];
+  }
+  return [];
+}
+
+const ZONE_TEXT = {
+  dp: {
+    low: {
+      title: 'Too restrictive — excessive noise',
+      text: 'At very small ε, the formal guarantee is extremely strong but calibrated noise dominates query outputs. For most dataset sizes and statistical queries, results will be too inaccurate to be actionable. Appropriate only when maximum privacy is the absolute priority and significant utility loss is accepted.',
+    },
+    recommended: {
+      title: 'Recommended — balanced privacy and utility',
+      text: "This range delivers a strong, auditable (ε, δ) guarantee while keeping noise small relative to most statistical signals. It is the operational range used by the US Census Bureau's 2020 Census, Apple's privacy-preserving analytics, and most HIPAA Expert Determination submissions.",
+    },
+    high: {
+      title: 'Too permissive — privacy guarantee weakens',
+      text: 'At large ε, output noise is minimal but the formal privacy guarantee degrades significantly. At ε > 3, individual-level inference becomes increasingly feasible for a well-resourced adversary. Most regulatory frameworks and privacy engineering standards consider ε > 3 insufficient for sensitive or regulated data.',
+    },
+  },
+  anon: {
+    low: {
+      title: 'Too small — limited re-identification protection',
+      text: 'Small equivalence groups provide minimal protection. With auxiliary knowledge from public records, linked databases, or background information, an adversary can often single out individuals within groups of 2–4. HIPAA Safe Harbor guidance and most academic and regulatory standards recommend k ≥ 5 as a practical minimum.',
+    },
+    recommended: {
+      title: 'Recommended — balanced protection and utility',
+      text: 'Provides meaningful re-identification protection while preserving dataset utility. Most records can be generalized without suppression, group sizes resist typical re-identification attacks, and the dataset remains analytically useful. This range aligns with HIPAA Safe Harbor evidence and GDPR de-identification requirements.',
+    },
+    high: {
+      title: 'Too large — significant utility loss',
+      text: 'Very high k delivers strong protection, but at substantial cost. Heavy generalization collapses granular fields (ages → decades, ZIP codes → regions) and forces suppression of records that cannot form groups of k — often removing minority subgroups entirely. Dataset utility for downstream analysis degrades substantially.',
+    },
+  },
+  fl: {
+    low: {
+      title: 'Too few clients — slow convergence',
+      text: "Very low participation means each round's gradient update is a poor statistical approximation of the true global gradient. Estimates are high-variance and biased toward whichever clients happen to be selected. Many more training rounds are required to reach equivalent convergence, dramatically increasing total training time.",
+    },
+    recommended: {
+      title: 'Recommended — balanced convergence and efficiency',
+      text: 'At 5–10%, gradient estimates are statistically representative of the full federation while per-round coordination overhead remains tractable. Rounds complete reliably even with participant dropouts. This is the standard participation range in production Federated Learning deployments at Google and Apple.',
+    },
+    high: {
+      title: 'Too many clients — coordination overhead',
+      text: 'Coordinating a large fraction of participants per round increases per-round latency, makes rounds more vulnerable to stragglers and dropouts, and delivers diminishing accuracy returns. Practical FL deployments rarely exceed 10–15% participation per round — the marginal gain from additional clients drops off quickly.',
+    },
+  },
 };
+
+function getZoneInfo(winner, pct, recommendedZone) {
+  const zone =
+    pct < recommendedZone.from ? 'low'
+    : pct <= recommendedZone.to ? 'recommended'
+    : 'high';
+  return { zone, ...(ZONE_TEXT[winner]?.[zone] || { title: '', text: '' }) };
+}
 
 // ─── Shared icon ──────────────────────────────────────────────────────────────
 function Chevron({ open }) {
@@ -95,7 +233,10 @@ function MetricRow({ label, value }) {
     <div className="flex items-center gap-4">
       <span className="text-xs text-[#6B7280] w-36 flex-shrink-0">{label}</span>
       <div className="flex-1 bg-[#F0F1F3] h-1.5 rounded-full overflow-hidden">
-        <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: barColor }} />
+        <div
+          className="h-full rounded-full transition-all duration-200"
+          style={{ width: `${pct}%`, backgroundColor: barColor }}
+        />
       </div>
       <span className="text-xs font-semibold text-[#0F1117] w-8 text-right flex-shrink-0">{pct}</span>
     </div>
@@ -178,76 +319,120 @@ function FactorRow({ req, winnerName }) {
   );
 }
 
-// ─── Static parameter range bar (replaces interactive slider) ─────────────────
-function StaticParamBar({ simpleParam }) {
-  const { name, value, subvalue, leftLabel, rightLabel, markers, recommendedZone, zoneLabel, description } = simpleParam;
-  const effect = PARAM_EFFECT[name];
+// ─── Interactive Parameter Slider ─────────────────────────────────────────────
+function InteractiveParamSlider({ simpleParam, winner }) {
+  const { name, leftLabel, rightLabel, markers, recommendedZone, zoneLabel, description } = simpleParam;
+  const [sliderPct, setSliderPct] = useState(simpleParam.pct);
+
+  const paramVal  = computeParamValue(winner, sliderPct, simpleParam);
+  const aspects   = computeAspects(winner, sliderPct);
+  const zoneInfo  = getZoneInfo(winner, sliderPct, recommendedZone);
+
+  const zoneColors = {
+    low:         { bg: 'bg-amber-50',   border: 'border-amber-200',   title: 'text-amber-700',   badge: 'bg-amber-100 text-amber-700 border-amber-200'   },
+    recommended: { bg: 'bg-emerald-50', border: 'border-emerald-200', title: 'text-emerald-700', badge: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+    high:        { bg: 'bg-red-50',     border: 'border-red-200',     title: 'text-red-700',     badge: 'bg-red-100 text-red-700 border-red-200'           },
+  };
+  const zc = zoneColors[zoneInfo.zone];
 
   return (
-    <div className="space-y-5">
-      {/* Name + value */}
+    <div className="space-y-6">
+
+      {/* Name + current value */}
       <div>
         <p className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-widest mb-2">{name}</p>
-        <div className="flex items-baseline gap-3">
-          <span className="text-2xl font-bold text-[#0F1117]">{value}</span>
-          {subvalue && <span className="text-sm text-[#9CA3AF]">{subvalue}</span>}
+        <div className="flex items-baseline gap-3 flex-wrap">
+          <span className="text-2xl font-bold text-[#0F1117]">{paramVal.primary}</span>
+          {paramVal.mode && (
+            <span className="text-sm text-[#9CA3AF]">{paramVal.mode}</span>
+          )}
+          {paramVal.badge && (
+            <span className={`text-xs font-semibold px-2 py-0.5 border rounded-sm ${zc.badge}`}>
+              {paramVal.badge}
+            </span>
+          )}
         </div>
         {description && (
           <p className="text-xs text-[#6B7280] mt-2 leading-relaxed max-w-lg">{description}</p>
         )}
       </div>
 
-      {/* Range bar */}
+      {/* Slider */}
       <div>
         <div className="flex justify-between text-xs text-[#9CA3AF] mb-2">
           <span>← {leftLabel}</span>
           <span>{rightLabel} →</span>
         </div>
-        <div className="flex h-7 rounded-sm overflow-hidden border border-[#E2E4E9]">
-          {recommendedZone ? (
-            <>
-              <div
-                style={{ width: `${recommendedZone.from}%` }}
-                className="bg-[#F0F1F3] flex-shrink-0"
-              />
-              <div
-                style={{ width: `${recommendedZone.to - recommendedZone.from}%` }}
-                className="bg-[#DBEAFE] border-x border-[#93C5FD] flex-shrink-0 flex items-center justify-center"
-              >
-                <span className="text-[10px] font-semibold text-[#2563EB] select-none">
-                  Recommended
-                </span>
-              </div>
-              <div
-                style={{ width: `${100 - recommendedZone.to}%` }}
-                className="bg-[#F0F1F3] flex-shrink-0"
-              />
-            </>
-          ) : (
-            <div className="flex-1 bg-[#F0F1F3]" />
-          )}
+
+        <div className="relative h-8 select-none">
+          {/* Track with zone coloring */}
+          <div className="absolute inset-0 flex rounded-sm overflow-hidden border border-[#E2E4E9]">
+            <div style={{ width: `${recommendedZone.from}%` }} className="bg-[#F0F1F3]" />
+            <div
+              style={{ width: `${recommendedZone.to - recommendedZone.from}%` }}
+              className="bg-[#DBEAFE] border-x border-[#93C5FD] flex items-center justify-center"
+            >
+              <span className="text-[10px] font-semibold text-[#2563EB] select-none">Recommended</span>
+            </div>
+            <div style={{ width: `${100 - recommendedZone.to}%` }} className="bg-[#F0F1F3]" />
+          </div>
+
+          {/* Thumb vertical line */}
+          <div
+            className="absolute top-0 bottom-0 w-0.5 bg-[#111827] pointer-events-none z-10"
+            style={{ left: `${sliderPct}%` }}
+          />
+
+          {/* Thumb circle */}
+          <div
+            className="absolute w-5 h-5 bg-white border-2 border-[#111827] rounded-full shadow-md pointer-events-none z-10"
+            style={{ left: `${sliderPct}%`, top: '50%', transform: 'translateX(-50%) translateY(-50%)' }}
+          />
+
+          {/* Invisible range input overlay — handles all interaction */}
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={sliderPct}
+            onChange={e => setSliderPct(Number(e.target.value))}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+            style={{ margin: 0, padding: 0 }}
+          />
         </div>
+
         <div className="flex justify-between text-[10px] text-[#9CA3AF] mt-1.5">
           {markers.map((m, i) => <span key={i}>{m}</span>)}
         </div>
       </div>
 
-      {/* Zone label */}
+      {/* Zone description — updates as slider moves */}
+      <div className={`border rounded-sm px-4 py-3 transition-colors duration-150 ${zc.bg} ${zc.border}`}>
+        <p className={`text-[10px] font-bold uppercase tracking-widest mb-1.5 ${zc.title}`}>
+          {zoneInfo.title}
+        </p>
+        <p className="text-xs text-[#6B7280] leading-relaxed">{zoneInfo.text}</p>
+      </div>
+
+      {/* Dynamic aspects — 4 bars that update as slider moves */}
+      <div>
+        <p className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-widest mb-3">
+          Impact at Current Setting
+        </p>
+        <div className="space-y-3.5">
+          {aspects.map((a, i) => (
+            <MetricRow key={i} label={a.label} value={a.value} />
+          ))}
+        </div>
+      </div>
+
+      {/* Recommended zone legend */}
       {zoneLabel && (
-        <div className="flex items-center gap-2 text-xs">
+        <div className="flex items-center gap-2 text-xs pt-2 border-t border-[#E2E4E9]">
           <div className="w-3 h-3 bg-[#DBEAFE] border border-[#93C5FD] flex-shrink-0" />
           <span className="text-[#6B7280]">Recommended range:</span>
           <span className="font-semibold text-[#2563EB]">{zoneLabel}</span>
-        </div>
-      )}
-
-      {/* Effect description */}
-      {effect && (
-        <div className="border border-[#E2E4E9] bg-[#F7F8FA] rounded-sm px-4 py-3">
-          <p className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-widest mb-1.5">
-            Effect of Adjustment
-          </p>
-          <p className="text-xs text-[#6B7280] leading-relaxed">{effect}</p>
         </div>
       )}
     </div>
@@ -458,7 +643,7 @@ export default function ResultCard({ result, onRestart }) {
             Configuration Guidance
           </p>
           {simpleParam ? (
-            <StaticParamBar simpleParam={simpleParam} />
+            <InteractiveParamSlider simpleParam={simpleParam} winner={winner} />
           ) : (
             <div className="flex items-start gap-4">
               <div className="w-8 h-8 bg-[#F0F1F3] border border-[#E2E4E9] flex items-center justify-center flex-shrink-0 text-base rounded-sm">
