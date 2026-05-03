@@ -1,4 +1,15 @@
+import { useState } from 'react';
+
 export default function Intro({ onStart }) {
+  const [showModal, setShowModal] = useState(false);
+
+  const steps = [
+    { num: '01', title: 'Answer 14 questions', desc: 'Cover your data types, threat model, trust boundaries, compliance obligations, and operational constraints.' },
+    { num: '02', title: 'Automated scoring', desc: 'Each answer adjusts match scores across five privacy approaches using a weighted criteria model.' },
+    { num: '03', title: 'Ranked recommendations', desc: 'See which approach fits best, with match percentages and the specific reasons for each ranking.' },
+    { num: '04', title: 'Configuration guidance', desc: 'Dial in parameters like ε for differential privacy or k for anonymization based on your risk tolerance.' },
+  ];
+
   const techs = [
     { name: 'Anonymization', desc: 'K-Anonymity & L-Diversity for dataset publication' },
     { name: 'Differential Privacy', desc: 'Formal mathematical guarantees on queries and ML training' },
@@ -48,7 +59,10 @@ export default function Intro({ onStart }) {
             >
               Start Assessment
             </button>
-            <button className="text-sm font-medium text-[#6B7280] hover:text-[#0F1117] transition-colors">
+            <button
+              onClick={() => setShowModal(true)}
+              className="text-sm font-medium text-[#6B7280] hover:text-[#0F1117] transition-colors"
+            >
               Learn How It Works →
             </button>
           </div>
@@ -89,6 +103,45 @@ export default function Intro({ onStart }) {
           </p>
         </div>
       </main>
+      {/* How It Works Modal */}
+      {showModal && (
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4"
+          onClick={() => setShowModal(false)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl max-w-lg w-full p-8"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-bold text-[#0F1117] tracking-tight">How It Works</h2>
+              <button
+                onClick={() => setShowModal(false)}
+                className="text-[#9CA3AF] hover:text-[#0F1117] transition-colors text-xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <div className="space-y-5">
+              {steps.map(s => (
+                <div key={s.num} className="flex gap-4">
+                  <span className="text-xs font-bold text-[#2563EB] mt-0.5 w-5 flex-shrink-0">{s.num}</span>
+                  <div>
+                    <p className="text-sm font-semibold text-[#0F1117] mb-0.5">{s.title}</p>
+                    <p className="text-sm text-[#6B7280] leading-relaxed">{s.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => { setShowModal(false); onStart(); }}
+              className="mt-8 w-full bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-semibold text-sm py-2.5 rounded transition-colors duration-150"
+            >
+              Start Assessment
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
