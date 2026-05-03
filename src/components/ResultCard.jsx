@@ -487,7 +487,7 @@ function InteractiveParamSlider({ simpleParam, winner }) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function ResultCard({ result, onRestart }) {
-  const { winner, winnerTech, requirements, tradeoffs, rejections, stack, simpleParam, techScores } = result;
+  const { winner, winnerTech, requirements, tradeoffs, rejections, stack, simpleParam, techScores, justification } = result;
 
   const safeStack = stack || [{ techId: winner, role: 'Primary' }];
   const scoreByTech = Object.fromEntries((techScores || []).map(t => [t.tech, t.percentage]));
@@ -586,7 +586,32 @@ export default function ResultCard({ result, onRestart }) {
           </div>
         </div>
 
-        {/* ── 2. Performance Profile ── */}
+        {/* ── 2. Recommendation Rationale ── */}
+        <div className="bg-white border border-[#E2E4E9] px-7 py-7">
+          <p className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-widest mb-4">
+            Recommendation Rationale
+          </p>
+          <p className="text-sm text-[#374151] leading-relaxed mb-6">
+            {winnerTech.description}
+          </p>
+          {justification && justification.length > 0 && (
+            <>
+              <p className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-widest mb-3">
+                Specific to your answers
+              </p>
+              <ul className="space-y-2.5">
+                {justification.map((reason, i) => (
+                  <li key={i} className="flex items-start gap-3">
+                    <span className="mt-1 w-1.5 h-1.5 rounded-full bg-[#2563EB] flex-shrink-0" />
+                    <span className="text-sm text-[#374151] leading-relaxed">{reason}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+
+        {/* ── 3. Performance Profile ── */}
         <div className="bg-white border border-[#E2E4E9] px-6 py-6">
           <p className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-widest mb-5">
             Performance Profile
@@ -602,7 +627,7 @@ export default function ResultCard({ result, onRestart }) {
           </div>
         </div>
 
-        {/* ── 3. Analysis ── */}
+        {/* ── 4. Analysis ── */}
         <div className="bg-white border border-[#E2E4E9]">
           <div className="px-6 py-4 border-b border-[#E2E4E9]">
             <p className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-widest">Analysis</p>
@@ -696,7 +721,7 @@ export default function ResultCard({ result, onRestart }) {
           </div>
         </div>
 
-        {/* ── 4. Configuration Guidance ── */}
+        {/* ── 5. Configuration Guidance ── */}
         <div className="bg-white border border-[#E2E4E9] px-6 py-6">
           <p className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-widest mb-5">
             Configuration Guidance
@@ -722,7 +747,7 @@ export default function ResultCard({ result, onRestart }) {
           )}
         </div>
 
-        {/* ── 5. Key Decision Factors ── */}
+        {/* ── 6. Key Decision Factors ── */}
         {safeReqs.length > 0 && (
           <div className="bg-white border border-[#E2E4E9] px-6 py-6">
             <p className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-widest mb-4">
